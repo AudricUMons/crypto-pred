@@ -1,0 +1,23 @@
+# Virtual env / environments
+venv/
+.venv/
+env/
+.env
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+# Notebooks
+.ipynb_checkpoints/
+# Logs & archives
+*.log
+*.zip
+*.tar.gz
+# App/Streamlit/Results
+results/
+.streamlit/
