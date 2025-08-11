@@ -32,15 +32,69 @@ RESULTS_DIR = "results"           # sur Colab: "/content/drive/MyDrive/results"
 #  GRID d'exploration AUTO_TEST
 #  Note: 'days' est pris en charge si tu appliques le patch app.py ci-dessous.
 # =========================
-PARAM_GRID = {
-    # Données
-    "days":        [60, 90, 120],            # <-- différent de DEFAULT_DAYS
+PARAM_GRID = [
+    # 1) Jours = 60, n_lags = 24 — SEULEMENT les horizons non testés / combos restants
+    #    Bilan: pour horizon=27 il reste 14 combos (voir sous-blocs) ; pour horizon=30 il reste tout (24 combos).
+    #    Total block(1): 38 combos.
+    # ---- horizon = 27
+    {
+        "days": [60],
+        "n_lags": [24],
+        "horizon": [27],
+        "n_estimators": [128],
+        "train_step": [1],
+        "threshold": [0.0020, 0.0030],      # (0.0010 et 0.0015 déjà testés en step=1)
+        "fee_rate": [0.001],
+    },
+    {
+        "days": [60],
+        "n_lags": [24],
+        "horizon": [27],
+        "n_estimators": [128],
+        "train_step": [2],
+        "threshold": [0.0010, 0.0015, 0.0020, 0.0030],  # rien testé en step=2 pour 128
+        "fee_rate": [0.001],
+    },
+    {
+        "days": [60],
+        "n_lags": [24],
+        "horizon": [27],
+        "n_estimators": [256],
+        "train_step": [1, 2, 12, 24],
+        "threshold": [0.0010, 0.0015, 0.0020, 0.0030],  # rien testé pour 256
+        "fee_rate": [0.001],
+    },
+    # ---- horizon = 30 (rien testé → tout reste)
+    {
+        "days": [60],
+        "n_lags": [24],
+        "horizon": [30],
+        "n_estimators": [64, 128, 256],
+        "train_step": [1, 2, 12 , 24],
+        "threshold": [0.0010, 0.0015, 0.0020, 0.0030],
+        "fee_rate": [0.001],
+    },
 
-    # Modèle
-    "n_lags":       [24, 27, 30, 33, 36],    # <-- différent de RF_N_LAGS
-    "horizon":      [18, 21, 24, 27, 30],    # <-- différent de RF_HORIZON
-    "n_estimators": [64, 128, 256],          # <-- différent de RF_N_ESTIMATORS
-    "train_step":   [1, 2],                  # <-- différent de RF_TRAIN_STEP
-    "threshold":    [0.0010, 0.0015, 0.0020, 0.0030],  # <-- différent de RF_THRESHOLD
-    "fee_rate":     [0.001],                 # tu peux élargir si besoin
-}
+    # 2) Jours = 60, n_lags != 24 — (rien testé ici) → tout reste
+    {
+        "days": [60],
+        "n_lags": [27, 30, 33, 36],
+        "horizon": [18, 21, 24, 27, 30],
+        "n_estimators": [64, 128, 256],
+        "train_step": [1, 2, 12, 24],
+        "threshold": [0.0010, 0.0015, 0.0020, 0.0030],
+        "fee_rate": [0.001],
+    },
+
+    # 3) Jours = 90 ou 120 — (rien testé ici) → tout reste
+    {
+        "days": [90, 120],
+        "n_lags": [24, 27, 30, 33, 36],
+        "horizon": [18, 21, 24, 27, 30],
+        "n_estimators": [64, 128, 256],
+        "train_step": [1, 2, 12, 24],
+        "threshold": [0.0010, 0.0015, 0.0020, 0.0030],
+        "fee_rate": [0.001],
+    },
+]
+

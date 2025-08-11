@@ -19,14 +19,22 @@ from crypto_app.charts.main import render_main_chart
 from crypto_app.charts.secondary import render_trades_chart
 
 # --- config (AJOUT) ---
-import config
+from . import config
 
 
 # ---------- Helpers ----------
 def _product_dict(d):
-    """Produit cartésien d'un dict {k:[...]} -> itère des dicts {k:v}."""
+    # Si on reçoit une liste de sous-grilles, on les déroule
+    if isinstance(d, list):
+        for sub in d:
+            yield from _product_dict(sub)
+        return
+
+    if not isinstance(d, dict):
+        raise TypeError(f"PARAM_GRID doit être dict ou list[dict], pas {type(d)}")
+
     keys = list(d.keys())
-    values = [v if isinstance(v, (list, tuple)) else [v] for v in d.values()]
+    values = [v if isinstance(v, (list, tuple, set)) else [v] for v in (d[k] for k in keys)]
     for combo in itertools.product(*values):
         yield dict(zip(keys, combo))
 
@@ -94,7 +102,7 @@ def _evaluate_run(df, params):
 
 def _save_results(res_df, best_tuple, df, out_dir):
     """
-    Sauvegarde CSV global + meta (+ détails par run si activé).
+    Sauvegarde CSV global + meta (+ bouton de DL).
     res_df: DataFrame de toutes les configs triées
     best_tuple: (score, params, pf, trades)
     """
@@ -117,7 +125,6 @@ def _save_results(res_df, best_tuple, df, out_dir):
     with open(os.path.join(out_dir, "meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
 
-    # Bouton de DL dans l'UI (utile sur Colab)
     with open(csv_path, "rb") as f:
         st.download_button(
             "⬇️ Télécharger toutes les configurations (CSV)",
@@ -142,6 +149,13 @@ def main():
         if not combos:
             st.error("PARAM_GRID est vide dans config.py — rien à tester.")
             return
+
+        # Dossier de sortie + fichier CSV incrémental
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        root = getattr(config, "RESULTS_DIR", "results")
+        out_dir = os.path.join(root, f"autotest_{ts}")
+        os.makedirs(out_dir, exist_ok=True)
+        csv_live = os.path.join(out_dir, "grid_results_live.csv")
 
         st.write(f"Nombre de combinaisons à tester : **{len(combos)}**")
         progress = st.progress(0)
@@ -172,6 +186,31 @@ def main():
             row = {**params, **metrics}
             results.append(row)
 
+            # 3bis) sauvegarde incrémentale (append 1 ligne)
+            pd.DataFrame([row]).to_csv(
+                csv_live,
+                mode="a",
+                header=not os.path.exists(csv_live),
+                index=False
+            )
+            # Snapshot du meilleur en cours (utile si la session coupe)
+            if best is None:
+                best_snapshot = {"tested": i, "total": len(combos)}
+            else:
+                best_snapshot = {
+                    "tested": i,
+                    "total": len(combos),
+                    "best_score": float(best[0]),
+                    "best_params": best[1],
+                }
+            with open(os.path.join(out_dir, "best_so_far.json"), "w") as f:
+                json.dump(best_snapshot, f, indent=2)
+
+            # (optionnel) détails par run
+            if getattr(config, "SAVE_PER_RUN_DETAILS", False):
+                prefix = os.path.join(out_dir, f"run_{i:04d}")
+                pf.to_csv(f"{prefix}_portfolio.csv", index=False)
+
             score = metrics["final_value"]  # critère = valeur finale max
             if (best is None) or (score > best[0]):
                 best = (score, params, pf, trades)
@@ -195,10 +234,7 @@ def main():
         else:
             df_best = df
 
-        # Sauvegardes sur disque (ou Drive si monté sur Colab)
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        root = getattr(config, "RESULTS_DIR", "results")
-        out_dir = os.path.join(root, f"autotest_{ts}")
+        # Sauvegardes finales (dans le même out_dir)
         _save_results(res_df, best, df_best, out_dir)
 
         # Affichage du meilleur run
