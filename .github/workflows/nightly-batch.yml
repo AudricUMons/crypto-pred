@@ -1,0 +1,44 @@
+name: Nightly batch (resume-friendly)
+
+on:
+  workflow_dispatch:      # lancer manuellement depuis l’onglet Actions
+  push:                   # lancer à chaque push sur main
+    branches: [ main ]
+    paths:
+      - 'run_batch.py'
+      - 'crypto_app/**'
+      - 'requirements.txt'
+      - '.github/workflows/nightly-batch.yml'
+  schedule:               # lancer chaque nuit à 01:00 UTC
+    - cron: '0 1 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+
+      - name: Run batch
+        run: |
+          mkdir -p results
+          python run_batch.py --coin-id bitcoin --vs-currency usd --results-dir results
+
+      - name: Commit results back
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results/*.csv results/*.json || true
+          git commit -m "batch: update results [skip ci]" || echo "Nothing to commit"
+          git push
