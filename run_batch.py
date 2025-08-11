@@ -17,6 +17,7 @@ def expand_param_grid(grid_blocks):
         for combo in itertools.product(*[block[k] for k in keys]):
             yield dict(zip(keys, combo))
 
+
 def count_total_combos(grid_blocks):
     total = 0
     for block in grid_blocks:
@@ -26,14 +27,19 @@ def count_total_combos(grid_blocks):
         total += m
     return total
 
+
 def safe_mkdir(p):
-    os.makedirs(p, exist_ok=True); return p
+    os.makedirs(p, exist_ok=True)
+    return p
+
 
 def dict_hash(d):
     return str(sorted(d.items()))
 
+
 def load_done_set(csv_path):
-    if not os.path.exists(csv_path): return set()
+    if not os.path.exists(csv_path):
+        return set()
     try:
         df = pd.read_csv(csv_path)
         if "param_hash" in df.columns:
@@ -42,11 +48,43 @@ def load_done_set(csv_path):
         pass
     return set()
 
+
 def append_row(csv_path, row):
-    import pandas as _pd
-    df = _pd.DataFrame([row])
+    df = pd.DataFrame([row])
     header = not os.path.exists(csv_path)
     df.to_csv(csv_path, mode="a", header=header, index=False)
+
+
+def _compute_final_value(out_df, df_feat=None, df_raw=None):
+    """Renvoie la valeur finale.
+    1) Si colonne 'value' présente, on l'utilise.
+    2) Sinon fallback: cash + btc * dernier prix (pris depuis df_feat/df_raw)."""
+    if out_df is None or len(out_df) == 0:
+        return None
+    if "value" in out_df.columns:
+        return float(out_df["value"].iloc[-1])
+
+    cash_last = float(out_df["cash"].iloc[-1]) if "cash" in out_df.columns else 0.0
+    btc_last = float(out_df["btc"].iloc[-1]) if "btc" in out_df.columns else 0.0
+
+    last_price = None
+    for df in (df_feat, df_raw):
+        if df is None:
+            continue
+        for col in ("price", "close", "Close", "adj_close", "Adj Close"):
+            if col in df.columns:
+                try:
+                    last_price = float(df[col].iloc[-1])
+                    break
+                except Exception:
+                    continue
+        if last_price is not None:
+            break
+
+    if last_price is None:
+        return None
+    return cash_last + btc_last * last_price
+
 
 def main():
     parser = argparse.ArgumentParser(description="Batch runner (sans UI) pour AUTO_TEST.")
@@ -80,6 +118,7 @@ def main():
           f"results_dir={results_dir}, grid={total} combos")
 
     done = load_done_set(live_csv)
+    print(f"Resuming: skipping {len(done)} already-done combos; remaining {total - len(done)} to run.")
 
     # Reprise du meilleur en cours si présent
     best_track = {"final_value": float("-inf"), "row": None}
@@ -121,8 +160,10 @@ def main():
         else:
             df_raw = data_cache[dkey]
 
+        # Features
         df_feat = user_features.add_indicators(df_raw)
 
+        # Simulation
         out_df, trades = user_models.simulate_rf_follow(
             df_feat,
             initial_cash=args.initial_cash,
@@ -136,24 +177,38 @@ def main():
             return_signals=False,
         )
 
-        final_value = float(out_df["value"].iloc[-1])
+        # Mesures robustes
+        final_value = _compute_final_value(out_df, df_feat=df_feat, df_raw=df_raw)
+        if final_value is None:
+            print("[SKIP] résultat invalide (ni 'value' ni prix dispo) → combo ignoré.")
+            continue
+
         roi_pct = (final_value / args.initial_cash - 1.0) * 100.0
+
+        # trades_count robuste
+        try:
+            trades_count = len(trades[0]) if isinstance(trades, (list, tuple)) else int(trades)
+        except Exception:
+            trades_count = 0
+
         row = {
             "ts_utc": datetime.now(timezone.utc).isoformat(),
             **param_kv,
             "initial_cash": args.initial_cash,
             "final_value": round(final_value, 4),
             "roi_pct": round(roi_pct, 4),
-            "trades_count": len(trades[0]),
+            "trades_count": trades_count,
             "param_hash": phash,
         }
         append_row(live_csv, row)
 
+        # Détails (optionnel)
         if args.save_details:
             base = f"details_{args.coin_id}_{days}d_L{n_lags}_H{horizon}_T{train_step}_NE{n_estimators}_TH{threshold}_FEE{fee_rate}.csv"
             out_path = os.path.join(results_dir, base)
             out_df.to_csv(out_path)
 
+        # Best-so-far
         if final_value > best_track["final_value"]:
             best_track = {"final_value": final_value, "row": row}
             with open(best_json, "w", encoding="utf-8") as f:
@@ -164,6 +219,7 @@ def main():
 
         if args.cooldown_seconds > 0:
             time.sleep(args.cooldown_seconds)
+
 
 if __name__ == "__main__":
     main()
