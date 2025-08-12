@@ -1,2 +1,3 @@
 ts_utc,days,horizon,n_lags,train_step,n_estimators,fee_rate,threshold,coin_id,vs_currency,provider,initial_cash,final_value,roi_pct,trades_count,param_hash
 2025-08-12T18:42:45.826999+00:00,60,27,24,1,128,0.001,0.002,bitcoin,usd,auto,10000.0,10233.1039,2.331,24,"[('coin_id', 'bitcoin'), ('days', 60), ('fee_rate', 0.001), ('horizon', 27), ('n_estimators', 128), ('n_lags', 24), ('provider', 'auto'), ('threshold', 0.002), ('train_step', 1), ('vs_currency', 'usd')]"
+2025-08-12T19:01:23.824055+00:00,60,27,24,1,128,0.001,0.003,bitcoin,usd,auto,10000.0,10382.125,3.8212,21,"[('coin_id', 'bitcoin'), ('days', 60), ('fee_rate', 0.001), ('horizon', 27), ('n_estimators', 128), ('n_lags', 24), ('provider', 'auto'), ('threshold', 0.003), ('train_step', 1), ('vs_currency', 'usd')]"
