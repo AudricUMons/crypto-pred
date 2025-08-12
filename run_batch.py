@@ -93,9 +93,9 @@ def git_checkpoint(message, results_dir, best_json):
     branch = os.getenv("GITHUB_REF_NAME") or os.getenv("GITHUB_HEAD_REF") or "main"
     _run('git config user.name "github-actions[bot]"')
     _run('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"')
-    _run(f'git add {results_dir}/*.csv {results_dir}/*.json || true')
+    _run(f'git add -f {results_dir}/*.csv {results_dir}/*.json || true')
     if os.path.exists(best_json):
-        _run(f'git add "{best_json}" || true')
+        _run(f'git add -f "{best_json}" || true')
     _run(f'git commit -m "{message} [skip ci]" || true')
     _run(f'git pull --rebase origin {branch} || true')
     _run('git push || true')

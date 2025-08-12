@@ -60,7 +60,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add results/*.csv results/*.json || true
+          git add -f results/*.csv results/*.json || true
           git commit -m "batch: final update [skip ci]" || echo "Nothing to commit"
           git push || true
 
