@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import os, json, time, argparse, itertools
+import os, json, time, argparse, itertools, subprocess
 from datetime import datetime, timezone
 import pandas as pd
 
-# Imports adaptés à ta structure de dossiers
 from crypto_app import config as user_config
 from crypto_app.methods import data as user_data
 from crypto_app.methods import features as user_features
@@ -56,16 +55,13 @@ def append_row(csv_path, row):
 
 
 def _compute_final_value(out_df, df_feat=None, df_raw=None):
-    """Renvoie la valeur finale.
-    1) Si colonne 'value' présente, on l'utilise.
-    2) Sinon fallback: cash + btc * dernier prix (pris depuis df_feat/df_raw)."""
     if out_df is None or len(out_df) == 0:
         return None
     if "value" in out_df.columns:
         return float(out_df["value"].iloc[-1])
 
     cash_last = float(out_df["cash"].iloc[-1]) if "cash" in out_df.columns else 0.0
-    btc_last = float(out_df["btc"].iloc[-1]) if "btc" in out_df.columns else 0.0
+    btc_last  = float(out_df["btc"].iloc[-1])  if "btc"  in out_df.columns else 0.0
 
     last_price = None
     for df in (df_feat, df_raw):
@@ -86,6 +82,26 @@ def _compute_final_value(out_df, df_feat=None, df_raw=None):
     return cash_last + btc_last * last_price
 
 
+# ---------- Git helpers ----------
+def _run(cmd):
+    subprocess.run(cmd, shell=True, check=False,
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+def git_checkpoint(message, results_dir, best_json):
+    if not os.path.isdir(".git"):
+        return
+    branch = os.getenv("GITHUB_REF_NAME") or os.getenv("GITHUB_HEAD_REF") or "main"
+    _run('git config user.name "github-actions[bot]"')
+    _run('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"')
+    _run(f'git add {results_dir}/*.csv {results_dir}/*.json || true')
+    if os.path.exists(best_json):
+        _run(f'git add "{best_json}" || true')
+    _run(f'git commit -m "{message} [skip ci]" || true')
+    _run(f'git pull --rebase origin {branch} || true')
+    _run('git push || true')
+# ----------------------------------
+
+
 def main():
     parser = argparse.ArgumentParser(description="Batch runner (sans UI) pour AUTO_TEST.")
     parser.add_argument("--coin-id", default=user_config.DEFAULT_COIN_ID)
@@ -98,16 +114,20 @@ def main():
     parser.add_argument("--param-grid-file", default=None,
                         help="JSON optionnel pour remplacer config.PARAM_GRID")
     parser.add_argument("--cooldown-seconds", type=float, default=0.0)
+    parser.add_argument("--max-runtime-mins", type=float, default=0.0,
+                        help="Stoppe proprement après N minutes (0=illimité)")
+    parser.add_argument("--git-push-each", action="store_true",
+                        help="Commit & push après CHAQUE combo (checkpoint).")
+    parser.add_argument("--push-every", type=int, default=1,
+                        help="Si --git-push-each, push toutes les N configs (défaut 1).")
     args = parser.parse_args()
 
-    # Charger la grille
     if args.param_grid_file:
         with open(args.param_grid_file, "r", encoding="utf-8") as f:
             param_grid = json.load(f)
     else:
         param_grid = user_config.PARAM_GRID
 
-    # Préparer sorties
     results_dir = safe_mkdir(args.results_dir)
     live_csv = os.path.join(results_dir, "grid_results_live.csv")
     best_json = os.path.join(results_dir, "best_so_far.json")
@@ -117,10 +137,12 @@ def main():
           f"RUN CONFIG → coin={args.coin_id}, vs={args.vs_currency}, provider={args.provider}, "
           f"results_dir={results_dir}, grid={total} combos")
 
+    start_ts = time.time()
+    deadline = start_ts + args.max_runtime_mins * 60 if args.max_runtime_mins and args.max_runtime_mins > 0 else None
+
     done = load_done_set(live_csv)
     print(f"Resuming: skipping {len(done)} already-done combos; remaining {total - len(done)} to run.")
 
-    # Reprise du meilleur en cours si présent
     best_track = {"final_value": float("-inf"), "row": None}
     if os.path.exists(best_json):
         try:
@@ -134,6 +156,10 @@ def main():
     data_cache = {}
     combos = list(expand_param_grid(param_grid))
     for i, params in enumerate(combos, start=1):
+        if deadline and time.time() >= deadline:
+            print("[STOP] Max runtime reached — exiting cleanly before starting next combo.")
+            break
+
         days        = int(params.get("days", user_config.DEFAULT_DAYS))
         horizon     = int(params.get("horizon", getattr(user_config, "RF_HORIZON", 24)))
         n_lags      = int(params.get("n_lags", getattr(user_config, "RF_N_LAGS", 30)))
@@ -151,7 +177,6 @@ def main():
         if phash in done:
             continue
 
-        # Données (avec cache)
         dkey = (days, args.coin_id, args.vs_currency, args.provider)
         if dkey not in data_cache:
             df_raw = user_data.fetch_data(days=days, coin_id=args.coin_id,
@@ -160,10 +185,8 @@ def main():
         else:
             df_raw = data_cache[dkey]
 
-        # Features
         df_feat = user_features.add_indicators(df_raw)
 
-        # Simulation
         out_df, trades = user_models.simulate_rf_follow(
             df_feat,
             initial_cash=args.initial_cash,
@@ -177,15 +200,12 @@ def main():
             return_signals=False,
         )
 
-        # Mesures robustes
         final_value = _compute_final_value(out_df, df_feat=df_feat, df_raw=df_raw)
         if final_value is None:
             print("[SKIP] résultat invalide (ni 'value' ni prix dispo) → combo ignoré.")
             continue
 
         roi_pct = (final_value / args.initial_cash - 1.0) * 100.0
-
-        # trades_count robuste
         try:
             trades_count = len(trades[0]) if isinstance(trades, (list, tuple)) else int(trades)
         except Exception:
@@ -202,13 +222,11 @@ def main():
         }
         append_row(live_csv, row)
 
-        # Détails (optionnel)
         if args.save_details:
             base = f"details_{args.coin_id}_{days}d_L{n_lags}_H{horizon}_T{train_step}_NE{n_estimators}_TH{threshold}_FEE{fee_rate}.csv"
             out_path = os.path.join(results_dir, base)
             out_df.to_csv(out_path)
 
-        # Best-so-far
         if final_value > best_track["final_value"]:
             best_track = {"final_value": final_value, "row": row}
             with open(best_json, "w", encoding="utf-8") as f:
@@ -216,6 +234,9 @@ def main():
 
         print(f"[{i}/{total}] days={days} L={n_lags} H={horizon} TS={train_step} "
               f"NE={n_estimators} TH={threshold} FEE={fee_rate} -> final=${final_value:,.2f} (ROI={roi_pct:.2f}%)")
+
+        if args.git_push_each and (i % max(1, args.push_every) == 0):
+            git_checkpoint(message=f"checkpoint {i}/{total}", results_dir=results_dir, best_json=best_json)
 
         if args.cooldown_seconds > 0:
             time.sleep(args.cooldown_seconds)

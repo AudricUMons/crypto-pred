@@ -1,19 +1,23 @@
 name: Nightly batch (resume-friendly)
 
 on:
-  workflow_dispatch:      # lancer manuellement depuis l’onglet Actions
-  push:                   # lancer à chaque push sur main
+  workflow_dispatch:
+  push:
     branches: [ main ]
     paths:
       - 'run_batch.py'
       - 'crypto_app/**'
       - 'requirements.txt'
       - '.github/workflows/nightly-batch.yml'
-  schedule:               # lancer chaque nuit à 01:00 UTC
-    - cron: '0 1 * * *'
+  schedule:
+    - cron: '0 1 * * *'   # 01:00 UTC
 
 permissions:
   contents: write
+
+concurrency:
+  group: nightly-batch
+  cancel-in-progress: false
 
 jobs:
   run:
@@ -21,24 +25,48 @@ jobs:
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
 
       - name: Install deps
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt
 
-      - name: Run batch
+      - name: Run batch (push per combo + stop before 6h)
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
           mkdir -p results
-          python run_batch.py --coin-id bitcoin --vs-currency usd --results-dir results
+          python -u run_batch.py \
+            --coin-id bitcoin \
+            --vs-currency usd \
+            --results-dir results \
+            --max-runtime-mins 340 \
+            --git-push-each --push-every 1 2>&1 | tee -a run.log
 
-      - name: Commit results back
+      - name: Commit results back (final)
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add results/*.csv results/*.json || true
-          git commit -m "batch: update results [skip ci]" || echo "Nothing to commit"
-          git push
+          git commit -m "batch: final update [skip ci]" || echo "Nothing to commit"
+          git push || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-logs
+          path: run.log
