@@ -1,21 +1,21 @@
 {
-  "final_value": 10776.901820076087,
+  "final_value": 10854.713413809608,
   "row": {
-    "ts_utc": "2025-08-13T03:02:23.020532+00:00",
+    "ts_utc": "2025-08-14T02:28:33.048436+00:00",
     "days": 60,
     "horizon": 30,
     "n_lags": 24,
-    "train_step": 1,
-    "n_estimators": 64,
+    "train_step": 2,
+    "n_estimators": 256,
     "fee_rate": 0.001,
-    "threshold": 0.003,
+    "threshold": 0.002,
     "coin_id": "bitcoin",
     "vs_currency": "usd",
     "provider": "auto",
     "initial_cash": 10000.0,
-    "final_value": 10776.9018,
-    "roi_pct": 7.769,
-    "trades_count": 22,
-    "param_hash": "[('coin_id', 'bitcoin'), ('days', 60), ('fee_rate', 0.001), ('horizon', 30), ('n_estimators', 64), ('n_lags', 24), ('provider', 'auto'), ('threshold', 0.003), ('train_step', 1), ('vs_currency', 'usd')]"
+    "final_value": 10854.7134,
+    "roi_pct": 8.5471,
+    "trades_count": 29,
+    "param_hash": "[('coin_id', 'bitcoin'), ('days', 60), ('fee_rate', 0.001), ('horizon', 30), ('n_estimators', 256), ('n_lags', 24), ('provider', 'auto'), ('threshold', 0.002), ('train_step', 2), ('vs_currency', 'usd')]"
   }
 }
