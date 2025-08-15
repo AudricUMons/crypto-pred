@@ -1,21 +1,21 @@
 {
-  "final_value": 11249.616247675454,
+  "final_value": 11280.295611188427,
   "row": {
-    "ts_utc": "2025-08-15T06:35:02.101390+00:00",
+    "ts_utc": "2025-08-15T08:23:28.012400+00:00",
     "days": 60,
     "horizon": 21,
     "n_lags": 27,
     "train_step": 1,
-    "n_estimators": 64,
+    "n_estimators": 128,
     "fee_rate": 0.001,
     "threshold": 0.003,
     "coin_id": "bitcoin",
     "vs_currency": "usd",
     "provider": "auto",
     "initial_cash": 10000.0,
-    "final_value": 11249.6162,
-    "roi_pct": 12.4962,
-    "trades_count": 32,
-    "param_hash": "[('coin_id', 'bitcoin'), ('days', 60), ('fee_rate', 0.001), ('horizon', 21), ('n_estimators', 64), ('n_lags', 27), ('provider', 'auto'), ('threshold', 0.003), ('train_step', 1), ('vs_currency', 'usd')]"
+    "final_value": 11280.2956,
+    "roi_pct": 12.803,
+    "trades_count": 33,
+    "param_hash": "[('coin_id', 'bitcoin'), ('days', 60), ('fee_rate', 0.001), ('horizon', 21), ('n_estimators', 128), ('n_lags', 27), ('provider', 'auto'), ('threshold', 0.003), ('train_step', 1), ('vs_currency', 'usd')]"
   }
 }
