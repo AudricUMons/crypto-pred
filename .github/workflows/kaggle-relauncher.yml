@@ -32,27 +32,11 @@ jobs:
           echo "{\"username\":\"${{ secrets.KAGGLE_USERNAME }}\",\"key\":\"${{ secrets.KAGGLE_KEY }}\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
 
-      # ---------- 1) FETCH market data with your code (GA a Internet) ----------
+      # ---------- 1) FETCH market data (Internet OK côté GA) ----------
       - name: Fetch market data (60/90/120 days) -> data_export/
         run: |
-          mkdir -p data_export
-          python - << 'PY'
-import pandas as pd
-from crypto_app.methods.data import fetch_data
-
-def dump(days:int):
-    df = fetch_data(days=days, coin_id="${{ env.COIN_ID }}", vs_currency="${{ env.VS_CCY }}", provider="auto")
-    # garde ts + price; adapte si ton pipeline attend d'autres colonnes
-    if "ts" not in df.columns:
-        # si ta colonne temps a un autre nom, normalise ici
-        # df = df.rename(columns={"timestamp":"ts"})
-        pass
-    df[["ts","price"]].to_csv(f"data_export/btc_usd_{days}d.csv", index=False)
-
-for d in (60, 90, 120):
-    dump(d)
-print("DONE")
-PY
+          python scripts/fetch_and_export.py
+          ls -lh data_export
 
       # ---------- 2) PUBLISH/UPDATE Dataset Kaggle: market-data ----------
       - name: Publish/Update Kaggle dataset (market-data)
@@ -93,7 +77,6 @@ PY
           kaggle datasets version -p . -m "auto results sync $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
 
       # ---------- 5) RELAUNCH the Kaggle notebook (12h session) ----------
-      # Astuce: on "pull" le kernel dans kernel_src/, on touche un fichier pour forcer un diff, puis on push.
       - name: Pull kernel sources
         run: |
           mkdir -p kernel_src
@@ -111,4 +94,3 @@ PY
       - name: Show kernel status (non-blocking)
         run: |
           kaggle kernels status "${{ secrets.KAGGLE_NOTEBOOK_SLUG }}" || true
-        
