@@ -32,6 +32,9 @@ jobs:
           echo "{\"username\":\"${{ secrets.KAGGLE_USERNAME }}\",\"key\":\"${{ secrets.KAGGLE_KEY }}\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
 
+      - name: Ensure PYTHONPATH
+        run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+
       # ---------- 1) FETCH market data (Internet OK côté GA) ----------
       - name: Fetch market data (60/90/120 days) -> data_export/
         run: |
@@ -40,21 +43,26 @@ jobs:
 
       # ---------- 2) PUBLISH/UPDATE Dataset Kaggle: market-data ----------
       - name: Publish/Update Kaggle dataset (market-data)
+        shell: bash
         run: |
+          set -euo pipefail
           cd data_export
           echo "market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > changelog.txt
-          if [ ! -f dataset-metadata.json ]; then
-            cat > dataset-metadata.json <<EOF
-          {
-            "title": "market-data",
-            "id": "${{ secrets.KAGGLE_DATASET_MARKET }}",
-            "licenses": [ { "name": "CC0-1.0" } ]
-          }
-          EOF
-          fi
-          kaggle datasets create -p . -r zip -u || true
-          kaggle datasets version -p . -m "auto market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
 
+          # Créer dataset-metadata.json si absent (sans heredoc)
+          if [ ! -f dataset-metadata.json ]; then
+            printf '%s\n' \
+              '{' \
+              '"title": "market-data",' \
+              '"id": "'"${{ secrets.KAGGLE_DATASET_MARKET }}"'", \
+              '"licenses": [ { "name": "CC0-1.0" } ]' \
+              '}' > dataset-metadata.json
+          fi
+
+          # Créer s'il n'existe pas, sinon OK
+          kaggle datasets create -p . -r zip -u || true
+          # Nouvelle version (fichiers mis à jour)
+          kaggle datasets version -p . -m "auto market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
 
       # ---------- 3) SYNC last results from Kaggle runner OUTPUT ----------
       - name: Pull last notebook OUTPUT (results to sync)
@@ -65,7 +73,9 @@ jobs:
           ls -la out || true
 
       - name: Prepare results_dataset folder
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p results_dataset
           if [ -f out/grid_results_live.csv ]; then
             cp out/grid_results_live.csv results_dataset/
@@ -81,21 +91,23 @@ jobs:
 
       # ---------- 4) PUBLISH/UPDATE Dataset Kaggle: grid-results ----------
       - name: Publish/Update Kaggle dataset (grid-results)
+        shell: bash
         run: |
+          set -euo pipefail
           cd results_dataset
-          echo "results update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > changelog.txt
+
+          # Créer dataset-metadata.json si absent (sans heredoc)
           if [ ! -f dataset-metadata.json ]; then
-            cat > dataset-metadata.json <<EOF
-            {
-              "title": "grid-results",
-              "id": "${{ secrets.KAGGLE_DATASET_RESULTS }}",
-              "licenses": [ { "name": "CC0-1.0" } ]
-            }
-            EOF
+            printf '%s\n' \
+              '{' \
+              '"title": "grid-results",' \
+              '"id": "'"${{ secrets.KAGGLE_DATASET_RESULTS }}"'", \
+              '"licenses": [ { "name": "CC0-1.0" } ]' \
+              '}' > dataset-metadata.json
           fi
+
           kaggle datasets create -p . -r zip -u || true
           kaggle datasets version -p . -m "auto results sync $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
-
 
       # ---------- 5) RELAUNCH the Kaggle notebook (12h session) ----------
       - name: Pull kernel sources
