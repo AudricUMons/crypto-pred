@@ -37,22 +37,22 @@ jobs:
         run: |
           mkdir -p data_export
           python - << 'PY'
-            import pandas as pd
-            from crypto_app.methods.data import fetch_data
+import pandas as pd
+from crypto_app.methods.data import fetch_data
 
-            def dump(days:int):
-                df = fetch_data(days=days, coin_id="${{ env.COIN_ID }}", vs_currency="${{ env.VS_CCY }}", provider="auto")
-                # garde ts + price; adapte si ton pipeline attend d'autres colonnes
-                if "ts" not in df.columns:
-                    # si ta colonne temps a un autre nom, normalise ici
-                    # df = df.rename(columns={"timestamp":"ts"})
-                    pass
-                df[["ts","price"]].to_csv(f"data_export/btc_usd_{days}d.csv", index=False)
+def dump(days:int):
+    df = fetch_data(days=days, coin_id="${{ env.COIN_ID }}", vs_currency="${{ env.VS_CCY }}", provider="auto")
+    # garde ts + price; adapte si ton pipeline attend d'autres colonnes
+    if "ts" not in df.columns:
+        # si ta colonne temps a un autre nom, normalise ici
+        # df = df.rename(columns={"timestamp":"ts"})
+        pass
+    df[["ts","price"]].to_csv(f"data_export/btc_usd_{days}d.csv", index=False)
 
-            for d in (60, 90, 120):
-                dump(d)
-            print("DONE")
-            PY
+for d in (60, 90, 120):
+    dump(d)
+print("DONE")
+PY
 
       # ---------- 2) PUBLISH/UPDATE Dataset Kaggle: market-data ----------
       - name: Publish/Update Kaggle dataset (market-data)
