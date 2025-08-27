@@ -1,0 +1,114 @@
+name: Kaggle relaunch (fetch market data + sync results + run 12h)
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"   # toutes les 12h
+  workflow_dispatch:
+
+jobs:
+  prep_and_launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      COIN_ID: bitcoin
+      VS_CCY: usd
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps for fetch + Kaggle CLI
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt kaggle pandas
+
+      - name: Setup Kaggle CLI
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"${{ secrets.KAGGLE_USERNAME }}\",\"key\":\"${{ secrets.KAGGLE_KEY }}\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+
+      # ---------- 1) FETCH market data with your code (GA a Internet) ----------
+      - name: Fetch market data (60/90/120 days) -> data_export/
+        run: |
+          mkdir -p data_export
+          python - << 'PY'
+            import pandas as pd
+            from crypto_app.methods.data import fetch_data
+
+            def dump(days:int):
+                df = fetch_data(days=days, coin_id="${{ env.COIN_ID }}", vs_currency="${{ env.VS_CCY }}", provider="auto")
+                # garde ts + price; adapte si ton pipeline attend d'autres colonnes
+                if "ts" not in df.columns:
+                    # si ta colonne temps a un autre nom, normalise ici
+                    # df = df.rename(columns={"timestamp":"ts"})
+                    pass
+                df[["ts","price"]].to_csv(f"data_export/btc_usd_{days}d.csv", index=False)
+
+            for d in (60, 90, 120):
+                dump(d)
+            print("DONE")
+            PY
+
+      # ---------- 2) PUBLISH/UPDATE Dataset Kaggle: market-data ----------
+      - name: Publish/Update Kaggle dataset (market-data)
+        run: |
+          cd data_export
+          echo "market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > changelog.txt
+          kaggle datasets create -p . -r zip -u -t -o -q -d "${{ secrets.KAGGLE_DATASET_MARKET }}" || true
+          kaggle datasets version -p . -m "auto market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
+
+      # ---------- 3) SYNC last results from Kaggle runner OUTPUT ----------
+      - name: Pull last notebook OUTPUT (results to sync)
+        continue-on-error: true
+        run: |
+          mkdir -p out
+          kaggle kernels output "${{ secrets.KAGGLE_NOTEBOOK_SLUG }}" -p out || true
+          ls -la out || true
+
+      - name: Prepare results_dataset folder
+        run: |
+          mkdir -p results_dataset
+          if [ -f out/grid_results_live.csv ]; then
+            cp out/grid_results_live.csv results_dataset/
+          else
+            echo "ts_utc,days,horizon,n_lags,train_step,n_estimators,fee_rate,threshold,coin_id,vs_currency,provider,initial_cash,final_value,roi_pct,trades_count,param_hash" > results_dataset/grid_results_live.csv
+          fi
+          if [ -f out/best_so_far.json ]; then
+            cp out/best_so_far.json results_dataset/
+          else
+            echo "{}" > results_dataset/best_so_far.json
+          fi
+          echo "results update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > results_dataset/changelog.txt
+
+      # ---------- 4) PUBLISH/UPDATE Dataset Kaggle: grid-results ----------
+      - name: Publish/Update Kaggle dataset (grid-results)
+        run: |
+          cd results_dataset
+          kaggle datasets create -p . -r zip -u -t -o -q -d "${{ secrets.KAGGLE_DATASET_RESULTS }}" || true
+          kaggle datasets version -p . -m "auto results sync $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
+
+      # ---------- 5) RELAUNCH the Kaggle notebook (12h session) ----------
+      # Astuce: on "pull" le kernel dans kernel_src/, on touche un fichier pour forcer un diff, puis on push.
+      - name: Pull kernel sources
+        run: |
+          mkdir -p kernel_src
+          kaggle kernels pull "${{ secrets.KAGGLE_NOTEBOOK_SLUG }}" -p kernel_src || true
+          ls -la kernel_src || true
+
+      - name: Bump timestamp to trigger run
+        run: |
+          echo "# bump $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> kernel_src/README.md || true
+
+      - name: Push (Commit & Run) kernel
+        run: |
+          kaggle kernels push -p kernel_src || true
+
+      - name: Show kernel status (non-blocking)
+        run: |
+          kaggle kernels status "${{ secrets.KAGGLE_NOTEBOOK_SLUG }}" || true
+        
