@@ -1,8 +1,15 @@
 # scripts/fetch_and_export.py
 import os
 import sys
+from pathlib import Path
 import pandas as pd
-from crypto_app.methods.data import fetch_data
+
+# >>> Rendez le package visible même si PYTHONPATH n'est pas réglé
+ROOT = Path(__file__).resolve().parents[1]  # racine du repo
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from crypto_app.methods.data import fetch_data  # import fonctionne maintenant
 
 COIN_ID = os.environ.get("COIN_ID", "bitcoin")
 VS_CCY  = os.environ.get("VS_CCY", "usd")
