@@ -43,8 +43,18 @@ jobs:
         run: |
           cd data_export
           echo "market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > changelog.txt
-          kaggle datasets create -p . -r zip -u -t -o -q -d "${{ secrets.KAGGLE_DATASET_MARKET }}" || true
+          if [ ! -f dataset-metadata.json ]; then
+            cat > dataset-metadata.json <<EOF
+          {
+            "title": "market-data",
+            "id": "${{ secrets.KAGGLE_DATASET_MARKET }}",
+            "licenses": [ { "name": "CC0-1.0" } ]
+          }
+          EOF
+          fi
+          kaggle datasets create -p . -r zip -u || true
           kaggle datasets version -p . -m "auto market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
+
 
       # ---------- 3) SYNC last results from Kaggle runner OUTPUT ----------
       - name: Pull last notebook OUTPUT (results to sync)
@@ -73,8 +83,19 @@ jobs:
       - name: Publish/Update Kaggle dataset (grid-results)
         run: |
           cd results_dataset
-          kaggle datasets create -p . -r zip -u -t -o -q -d "${{ secrets.KAGGLE_DATASET_RESULTS }}" || true
+          echo "results update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > changelog.txt
+          if [ ! -f dataset-metadata.json ]; then
+            cat > dataset-metadata.json <<EOF
+            {
+              "title": "grid-results",
+              "id": "${{ secrets.KAGGLE_DATASET_RESULTS }}",
+              "licenses": [ { "name": "CC0-1.0" } ]
+            }
+            EOF
+          fi
+          kaggle datasets create -p . -r zip -u || true
           kaggle datasets version -p . -m "auto results sync $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
+
 
       # ---------- 5) RELAUNCH the Kaggle notebook (12h session) ----------
       - name: Pull kernel sources
