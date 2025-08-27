@@ -48,14 +48,9 @@ jobs:
         run: |
           cd data_export
           echo "market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > changelog.txt
+          # créer dataset-metadata.json si absent (sans heredoc)
           if [ ! -f dataset-metadata.json ]; then
-            python - <<'PY'
-import json, os
-meta = {"title": "market-data",
-        "id": os.environ["KAGGLE_DS_ID"],
-        "licenses": [ {"name": "CC0-1.0"} ]}
-open("dataset-metadata.json","w").write(json.dumps(meta))
-PY
+            python -c 'import json,os; open("dataset-metadata.json","w").write(json.dumps({"title":"market-data","id":os.environ["KAGGLE_DS_ID"],"licenses":[{"name":"CC0-1.0"}]}))'
           fi
           kaggle datasets create -p . -r zip -u || true
           kaggle datasets version -p . -m "auto market update $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
@@ -90,13 +85,7 @@ PY
         run: |
           cd results_dataset
           if [ ! -f dataset-metadata.json ]; then
-            python - <<'PY'
-import json, os
-meta = {"title": "grid-results",
-        "id": os.environ["KAGGLE_DS_ID"],
-        "licenses": [ {"name": "CC0-1.0"} ]}
-open("dataset-metadata.json","w").write(json.dumps(meta))
-PY
+            python -c 'import json,os; open("dataset-metadata.json","w").write(json.dumps({"title":"grid-results","id":os.environ["KAGGLE_DS_ID"],"licenses":[{"name":"CC0-1.0"}]}))'
           fi
           kaggle datasets create -p . -r zip -u || true
           kaggle datasets version -p . -m "auto results sync $(date -u +"%Y-%m-%dT%H:%M:%SZ")" -r zip
